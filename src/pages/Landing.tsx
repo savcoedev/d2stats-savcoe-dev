@@ -2,7 +2,7 @@ import { motion } from "framer-motion";
 import { Shield, Crosshair, Heart, TrendingUp, Users, Gamepad2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
-const STEAM_LOGIN_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/steam-auth?action=login`;
+const STEAM_LOGIN_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/steam-auth?action=login&redirect_uri=${encodeURIComponent(window.location.origin)}`;
 
 const features = [
   {
