@@ -20,7 +20,8 @@ serve(async (req: Request) => {
 
   // Step 1: Redirect user to Steam OpenID
   if (action === "login") {
-    const returnUrl = `${SUPABASE_URL}/functions/v1/steam-auth?action=callback`;
+    const redirectUri = url.searchParams.get("redirect_uri") || "";
+    const returnUrl = `${SUPABASE_URL}/functions/v1/steam-auth?action=callback&redirect_uri=${encodeURIComponent(redirectUri)}`;
     const params = new URLSearchParams({
       "openid.ns": "http://specs.openid.net/auth/2.0",
       "openid.mode": "checkid_setup",
@@ -118,9 +119,8 @@ serve(async (req: Request) => {
       const accessToken = signInData?.session?.access_token;
       const refreshToken = signInData?.session?.refresh_token;
       
-      // Get the origin from the referer or use a default
-      const appOrigin = url.origin.replace("/functions/v1/steam-auth", "");
-      // We'll redirect to the app with hash params so the client can pick them up
+      // Use redirect_uri passed through the flow, fallback to APP_ORIGIN env var
+      const appOrigin = url.searchParams.get("redirect_uri") || Deno.env.get("APP_ORIGIN") || url.origin;
       const redirectUrl = `${appOrigin}/#access_token=${accessToken}&refresh_token=${refreshToken}&type=steam`;
 
       return Response.redirect(redirectUrl, 302);
