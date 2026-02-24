@@ -1,7 +1,1 @@
-project_id = "efscnjhldceebueoktqq"
-
-[functions.steam-auth]
-verify_jwt = false
-
-[functions.sync-matches]
-verify_jwt = false
+project_id = "qwnwxosjpoqlemoxpwuh"
