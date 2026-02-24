@@ -121,6 +121,13 @@ serve(async (req: Request) => {
       });
     }
 
+    // Load hero dictionary
+    const { data: heroRows } = await supabaseAdmin.from("heroes").select("id, localized_name");
+    const heroMap: Record<number, string> = {};
+    for (const h of heroRows ?? []) {
+      heroMap[h.id] = h.localized_name;
+    }
+
     // Convert Steam ID to account ID (32-bit)
     const steamId64 = BigInt(steam_id);
     const accountId = Number(steamId64 - BigInt("76561197960265728"));
@@ -169,7 +176,7 @@ serve(async (req: Request) => {
         ? (playerData.player_slot < 128) === (playerData.radiant_win ?? detail?.radiant_win)
         : null;
 
-      const heroName = playerData.hero_id ? `Hero ${playerData.hero_id}` : null;
+      const heroName = playerData.hero_id ? (heroMap[playerData.hero_id] ?? `Hero ${playerData.hero_id}`) : null;
       const gameMode = match.game_mode ?? 0;
       const duration = match.duration ?? 0;
       const startTime = new Date((match.start_time ?? 0) * 1000).toISOString();
