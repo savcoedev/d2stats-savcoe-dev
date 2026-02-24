@@ -14,6 +14,33 @@ export type Database = {
   }
   public: {
     Tables: {
+      heroes: {
+        Row: {
+          icon_url: string | null
+          id: number
+          image_url: string | null
+          localized_name: string
+          name: string
+          updated_at: string
+        }
+        Insert: {
+          icon_url?: string | null
+          id: number
+          image_url?: string | null
+          localized_name: string
+          name: string
+          updated_at?: string
+        }
+        Update: {
+          icon_url?: string | null
+          id?: number
+          image_url?: string | null
+          localized_name?: string
+          name?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       matches: {
         Row: {
           created_at: string
