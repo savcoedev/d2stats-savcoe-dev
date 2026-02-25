@@ -104,7 +104,7 @@ serve(async (req: Request) => {
     const accountId = Number(steamId64 - BigInt("76561197960265728"));
 
     // Fetch recent matches from OpenDota
-    const matchesRes = await fetch(`https://api.opendota.com/api/players/${accountId}/matches?limit=50`);
+    const matchesRes = await fetch(`https://api.opendota.com/api/players/${accountId}/matches?limit=25`);
     if (!matchesRes.ok) {
       return new Response(JSON.stringify({ error: "OpenDota API error" }), {
         status: 502,
