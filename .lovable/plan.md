@@ -1,23 +1,34 @@
 
 
-## Clear Old Match Data for Re-Sync
+## Limit to Last 25 Games + Add Game Dates to Chart
 
-All 50 existing matches were scored with the old calculation engine. To apply the new formulas (Impact Score, Map Pressure, Survival Consistency) and updated role groups (Core/Offlane/Support), we need to wipe the old data and let you re-sync.
+### Changes
 
-### Steps
+**1. Backend: `sync-matches` Edge Function**
+- Change OpenDota API fetch from `limit=50` to `limit=25`
+- This limits data capture to only the last 25 matches
 
-1. **Delete all rows from `player_match_stats`** (50 rows with old scores)
-2. **Delete all rows from `matches`** (50 rows referencing old data)
+**2. Frontend: `Dashboard.tsx`**
+- Change the query `.limit(50)` to `.limit(25)` for fetching stats
+- Change `stats.slice(0, 20)` to use all 25 stats (no slicing needed)
+- Include the `start_time` field in chart data so the X-axis shows game dates instead of match numbers
 
-This ensures the next sync processes all matches fresh with the new formulas, role groups, and game mode labels.
+**3. Frontend: `PerformanceChart.tsx`**
+- Update the `ChartDataPoint` interface to include a `date` string field (formatted date like "Feb 20")
+- Change the XAxis `dataKey` from `"match"` to `"date"` so game dates appear on the X-axis
+- Add angle/formatting to date tick labels so they don't overlap
 
-### After Deletion
+### Technical Details
 
-You'll log in, hit the Sync button, and all matches will be re-fetched from OpenDota and scored with:
-- New Impact Score formula: `max(0, (K*2.5)+(A*1.5)+(TD/500)-(D*2.0)) * mode_scalar`
-- New Map Pressure formula: `(TD + LH*mode_scalar) / (100 * T_min)`
-- New Survival Consistency: `((T_sec - D*35) / T_sec) * 100`
-- Role groups: Core / Offlane / Support
-- Game modes: Ranked / Normal / Turbo
-- Proper hero names from the heroes table
+**sync-matches/index.ts** (line 107):
+- `limit=50` becomes `limit=25`
+
+**Dashboard.tsx**:
+- Line 56: `.limit(50)` becomes `.limit(25)`
+- Lines 110-115: Chart data construction adds a `date` field using `format(new Date(m.start_time), "MMM d")` from `date-fns`, and removes the now-unnecessary `match` field
+
+**PerformanceChart.tsx**:
+- Interface gains `date: string` field
+- XAxis switches to `dataKey="date"` with angled labels (`angle={-45}`, `textAnchor="end"`) and increased bottom margin for readability
+- Tooltip `labelFormatter` shows the date string
 
