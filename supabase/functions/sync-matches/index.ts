@@ -9,85 +9,45 @@ const corsHeaders = {
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
-// Role weights for scoring (Pos 1-5)
-const ROLE_WEIGHTS: Record<number, { mapPressure: Record<string, number>; combat: Record<string, number>; survival: Record<string, number> }> = {
-  1: { // Hard Carry
-    mapPressure: { last_hits: 0.35, gpm: 0.3, tower_damage: 0.2, denies: 0.15 },
-    combat: { hero_damage: 0.4, kills: 0.35, assists: 0.25 },
-    survival: { deaths_penalty: 0.6, healing: 0.4 },
-  },
-  2: { // Mid
-    mapPressure: { last_hits: 0.25, gpm: 0.25, tower_damage: 0.25, denies: 0.25 },
-    combat: { hero_damage: 0.35, kills: 0.35, assists: 0.3 },
-    survival: { deaths_penalty: 0.5, healing: 0.5 },
-  },
-  3: { // Offlane
-    mapPressure: { last_hits: 0.2, gpm: 0.2, tower_damage: 0.35, denies: 0.25 },
-    combat: { hero_damage: 0.3, kills: 0.3, assists: 0.4 },
-    survival: { deaths_penalty: 0.4, healing: 0.6 },
-  },
-  4: { // Soft Support
-    mapPressure: { last_hits: 0.1, gpm: 0.15, tower_damage: 0.3, denies: 0.45 },
-    combat: { hero_damage: 0.2, kills: 0.2, assists: 0.6 },
-    survival: { deaths_penalty: 0.4, healing: 0.6 },
-  },
-  5: { // Hard Support
-    mapPressure: { last_hits: 0.05, gpm: 0.1, tower_damage: 0.25, denies: 0.6 },
-    combat: { hero_damage: 0.15, kills: 0.15, assists: 0.7 },
-    survival: { deaths_penalty: 0.3, healing: 0.7 },
-  },
-};
-
-// Baseline stats for normalization (approximate averages for a 40-min game)
-const BASELINES = {
-  last_hits: 250, denies: 20, gpm: 500, xpm: 550,
-  tower_damage: 3000, hero_damage: 25000, hero_healing: 5000,
-  kills: 10, deaths: 6, assists: 15,
-};
-
-const LANE_ROLE_NAMES: Record<number, string> = {
-  1: "Safe Lane", 2: "Mid Lane", 3: "Off Lane", 4: "Jungle",
-};
-
-const GAME_MODE_NAMES: Record<number, string> = {
-  1: "All Pick", 2: "Captain's Mode", 3: "Random Draft", 4: "Single Draft",
-  5: "All Random", 12: "Least Played", 16: "Captain's Draft",
-  22: "Ranked All Pick", 23: "Turbo",
-};
-
-function normalize(value: number, baseline: number, matchDuration: number): number {
-  const normalized = (value / (matchDuration / 60)) * 40;
-  return Math.min(100, (normalized / baseline) * 100);
+// --- Game Mode Classification ---
+function getGameModeName(gameMode: number): string {
+  if (gameMode === 22) return "Ranked";
+  if (gameMode === 23) return "Turbo";
+  return "Normal";
 }
 
-function computeScores(stats: any, laneRole: number, duration: number) {
-  const role = ROLE_WEIGHTS[laneRole] || ROLE_WEIGHTS[1];
-  const dur = Math.max(duration, 600); // min 10 min
+// --- Role Group Mapping ---
+function getRoleGroup(laneRole: number): string {
+  if (laneRole === 1 || laneRole === 2) return "Core";
+  if (laneRole === 3) return "Offlane";
+  return "Support"; // 4, 5, or unknown
+}
 
-  const mapPressure = Math.min(100,
-    normalize(stats.last_hits || 0, BASELINES.last_hits, dur) * role.mapPressure.last_hits +
-    normalize(stats.gold_per_min || 0, BASELINES.gpm / 40 * (dur / 60), dur) * role.mapPressure.gpm +
-    normalize(stats.tower_damage || 0, BASELINES.tower_damage, dur) * role.mapPressure.tower_damage +
-    normalize(stats.denies || 0, BASELINES.denies, dur) * role.mapPressure.denies
-  );
+// --- New Scoring Formulas (from PDF) ---
+function computeScores(stats: any, gameMode: number, durationSec: number) {
+  const modeScalar = gameMode === 23 ? 0.65 : 1.0;
+  const durationMin = Math.max(durationSec / 60, 1); // avoid division by zero
 
-  const combat = Math.min(100,
-    normalize(stats.hero_damage || 0, BASELINES.hero_damage, dur) * role.combat.hero_damage +
-    normalize(stats.kills || 0, BASELINES.kills, dur) * role.combat.kills +
-    normalize(stats.assists || 0, BASELINES.assists, dur) * role.combat.assists
-  );
+  const K = stats.kills ?? 0;
+  const A = stats.assists ?? 0;
+  const D = stats.deaths ?? 0;
+  const TD = stats.tower_damage ?? 0;
+  const LH = stats.last_hits ?? 0;
 
-  const deathPenalty = Math.max(0, 100 - normalize(stats.deaths || 0, BASELINES.deaths, dur) * 1.5);
-  const healingScore = normalize(stats.hero_healing || 0, BASELINES.hero_healing, dur);
-  const survival = Math.min(100,
-    deathPenalty * role.survival.deaths_penalty +
-    healingScore * role.survival.healing
-  );
+  // Impact Score: I = max(0, (K*2.5)+(A*1.5)+(TD/500)-(D*2.0)) * mode_scalar
+  const impactScore = Math.max(0, (K * 2.5) + (A * 1.5) + (TD / 500) - (D * 2.0)) * modeScalar;
+
+  // Map Pressure: P = (TD + (LH * mode_scalar)) / (100 * T_minutes)
+  const mapPressure = (TD + (LH * modeScalar)) / (100 * durationMin);
+
+  // Survival Consistency: S = ((T_match - (D*35)) / T_match) * 100
+  const tMatch = Math.max(durationSec, 1);
+  const survivalConsistency = Math.max(0, ((tMatch - (D * 35)) / tMatch) * 100);
 
   return {
-    map_pressure_score: Math.round(mapPressure * 10) / 10,
-    combat_score: Math.round(combat * 10) / 10,
-    survival_rate: Math.round(survival * 10) / 10,
+    combat_score: Math.round(impactScore * 100) / 100,
+    map_pressure_score: Math.round(mapPressure * 100) / 100,
+    survival_rate: Math.round(survivalConsistency * 100) / 100,
   };
 }
 
@@ -121,8 +81,19 @@ serve(async (req: Request) => {
       });
     }
 
-    // Load hero dictionary
-    const { data: heroRows } = await supabaseAdmin.from("heroes").select("id, localized_name");
+    // Load hero dictionary — auto-sync if empty
+    let { data: heroRows } = await supabaseAdmin.from("heroes").select("id, localized_name");
+    if (!heroRows || heroRows.length === 0) {
+      try {
+        await fetch(`${SUPABASE_URL}/functions/v1/sync-heroes`, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`, "Content-Type": "application/json" },
+          body: "{}",
+        });
+        const res = await supabaseAdmin.from("heroes").select("id, localized_name");
+        heroRows = res.data ?? [];
+      } catch { /* proceed without heroes */ }
+    }
     const heroMap: Record<number, string> = {};
     for (const h of heroRows ?? []) {
       heroMap[h.id] = h.localized_name;
@@ -172,6 +143,7 @@ serve(async (req: Request) => {
       }
 
       const laneRole = playerData.lane_role || 1;
+      const roleGroup = getRoleGroup(laneRole);
       const isWin = playerData.player_slot !== undefined
         ? (playerData.player_slot < 128) === (playerData.radiant_win ?? detail?.radiant_win)
         : null;
@@ -180,6 +152,7 @@ serve(async (req: Request) => {
       const gameMode = match.game_mode ?? 0;
       const duration = match.duration ?? 0;
       const startTime = new Date((match.start_time ?? 0) * 1000).toISOString();
+      const gameModeName = getGameModeName(gameMode);
 
       // Insert match
       await supabaseAdmin.from("matches").upsert({
@@ -188,24 +161,24 @@ serve(async (req: Request) => {
         start_time: startTime,
         duration,
         game_mode: gameMode,
-        game_mode_name: GAME_MODE_NAMES[gameMode] ?? `Mode ${gameMode}`,
+        game_mode_name: gameModeName,
         hero_id: playerData.hero_id ?? null,
         hero_name: heroName,
         is_win: isWin,
       }, { onConflict: "user_id,match_id" });
 
-      // Compute scores
-      const scores = computeScores(playerData, laneRole, duration);
+      // Compute scores with new formulas
+      const scores = computeScores(playerData, gameMode, duration);
 
       // Insert stats
       await supabaseAdmin.from("player_match_stats").upsert({
         user_id: userRecord.id,
         match_id: match.match_id,
         lane_role: laneRole,
-        lane_role_name: LANE_ROLE_NAMES[laneRole] ?? `Role ${laneRole}`,
+        lane_role_name: roleGroup,
         is_win: isWin,
         game_mode: gameMode,
-        game_mode_name: GAME_MODE_NAMES[gameMode] ?? `Mode ${gameMode}`,
+        game_mode_name: gameModeName,
         hero_id: playerData.hero_id ?? null,
         hero_name: heroName,
         duration,
@@ -225,7 +198,7 @@ serve(async (req: Request) => {
 
       processedCount++;
 
-      // Rate limiting: small delay between detail fetches
+      // Rate limiting
       if (processedCount % 5 === 0) {
         await new Promise(r => setTimeout(r, 1000));
       }

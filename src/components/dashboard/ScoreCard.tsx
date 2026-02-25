@@ -8,11 +8,14 @@ interface ScoreCardProps {
   icon: LucideIcon;
   color: string;
   delay?: number;
+  role?: "Core" | "Offlane" | "Support";
+  scoreType?: "impact" | "pressure" | "survival";
 }
 
-const ScoreCard = ({ title, score, icon: Icon, color, delay = 0 }: ScoreCardProps) => {
+const ScoreCard = ({ title, score, icon: Icon, color, delay = 0, role, scoreType }: ScoreCardProps) => {
   const circumference = 2 * Math.PI * 40;
-  const offset = circumference - (score / 100) * circumference;
+  const maxVal = scoreType === "impact" ? 50 : 100;
+  const offset = circumference - (Math.min(score, maxVal) / maxVal) * circumference;
 
   return (
     <motion.div
@@ -42,11 +45,11 @@ const ScoreCard = ({ title, score, icon: Icon, color, delay = 0 }: ScoreCardProp
             animate={{ opacity: 1 }}
             transition={{ delay: delay + 0.5 }}
           >
-            {Math.round(score)}
+            {score.toFixed(1)}
           </motion.span>
         </div>
       </div>
-      <TierBadge score={score} size="lg" />
+      <TierBadge score={score} size="lg" role={role} scoreType={scoreType} />
       <div className="flex items-center gap-2">
         <Icon className="w-4 h-4 text-muted-foreground" />
         <span className="text-sm font-medium text-muted-foreground">{title}</span>

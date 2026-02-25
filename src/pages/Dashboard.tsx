@@ -95,14 +95,22 @@ const Dashboard = () => {
 
   // Compute averages
   const avgMapPressure = stats.length ? stats.reduce((s, m) => s + (m.map_pressure_score ?? 0), 0) / stats.length : 0;
-  const avgCombat = stats.length ? stats.reduce((s, m) => s + (m.combat_score ?? 0), 0) / stats.length : 0;
+  const avgImpact = stats.length ? stats.reduce((s, m) => s + (m.combat_score ?? 0), 0) / stats.length : 0;
   const avgSurvival = stats.length ? stats.reduce((s, m) => s + (m.survival_rate ?? 0), 0) / stats.length : 0;
+
+  // Determine dominant role group
+  const roleCounts: Record<string, number> = {};
+  stats.forEach((m) => {
+    const r = m.lane_role_name ?? "Support";
+    roleCounts[r] = (roleCounts[r] ?? 0) + 1;
+  });
+  const dominantRole = (Object.entries(roleCounts).sort((a, b) => b[1] - a[1])[0]?.[0] ?? "Core") as "Core" | "Offlane" | "Support";
 
   // Chart data
   const chartData = stats.slice(0, 20).reverse().map((m, i) => ({
     match: i + 1,
     mapPressure: m.map_pressure_score ?? 0,
-    combat: m.combat_score ?? 0,
+    impact: m.combat_score ?? 0,
     survival: m.survival_rate ?? 0,
   }));
 
@@ -153,9 +161,9 @@ const Dashboard = () => {
               animate={{ opacity: 1 }}
               transition={{ duration: 0.3 }}
             >
-              <ScoreCard title="Map Pressure" score={avgMapPressure} icon={Shield} color="hsl(200 70% 55%)" delay={0} />
-              <ScoreCard title="Combat Score" score={avgCombat} icon={Sword} color="hsl(280 45% 55%)" delay={0.1} />
-              <ScoreCard title="Survival Rate" score={avgSurvival} icon={Heart} color="hsl(142 55% 45%)" delay={0.2} />
+              <ScoreCard title="Map Pressure" score={avgMapPressure} icon={Shield} color="hsl(200 70% 55%)" delay={0} scoreType="pressure" />
+              <ScoreCard title="Impact Score" score={avgImpact} icon={Sword} color="hsl(280 45% 55%)" delay={0.1} role={dominantRole} scoreType="impact" />
+              <ScoreCard title="Survival Consistency" score={avgSurvival} icon={Heart} color="hsl(142 55% 45%)" delay={0.2} scoreType="survival" />
             </motion.div>
 
             {chartData.length > 1 && <PerformanceChart data={chartData} />}

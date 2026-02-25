@@ -114,7 +114,7 @@ const MatchHistory = ({ matches, heroImages = {} }: MatchHistoryProps) => {
                   >
                     <div className="px-6 pb-4 grid grid-cols-3 gap-4">
                       <ScoreBar label="Map Pressure" value={match.map_pressure_score ?? 0} icon={Shield} color="hsl(200 70% 55%)" />
-                      <ScoreBar label="Combat" value={match.combat_score ?? 0} icon={Sword} color="hsl(280 45% 55%)" />
+                      <ScoreBar label="Impact" value={match.combat_score ?? 0} icon={Sword} color="hsl(280 45% 55%)" />
                       <ScoreBar label="Survival" value={match.survival_rate ?? 0} icon={Heart} color="hsl(142 55% 45%)" />
                     </div>
                   </motion.div>

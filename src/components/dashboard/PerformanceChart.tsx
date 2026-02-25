@@ -4,7 +4,7 @@ import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip, CartesianG
 interface ChartDataPoint {
   match: number;
   mapPressure: number;
-  combat: number;
+  impact: number;
   survival: number;
 }
 
@@ -50,7 +50,7 @@ const PerformanceChart = ({ data }: PerformanceChartProps) => {
               activeDot={{ r: 4, fill: "hsl(200 70% 55%)" }}
             />
             <Line
-              type="monotone" dataKey="combat" name="Combat"
+              type="monotone" dataKey="impact" name="Impact"
               stroke="hsl(280 45% 55%)" strokeWidth={2} dot={false}
               activeDot={{ r: 4, fill: "hsl(280 45% 55%)" }}
             />
