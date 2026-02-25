@@ -1,34 +1,32 @@
 
 
-## Limit to Last 25 Games + Add Game Dates to Chart
+## Fix: Steam Auth "is not valid JSON" Error
 
-### Changes
+### Root Cause
 
-**1. Backend: `sync-matches` Edge Function**
-- Change OpenDota API fetch from `limit=50` to `limit=25`
-- This limits data capture to only the last 25 matches
+The steam-auth callback flow breaks when:
+1. `signInWithPassword` fails (the password is derived from `SUPABASE_SERVICE_ROLE_KEY`, and if the key rotated or changed, existing users can't sign in)
+2. `admin.createUser` fails because the user already exists, but the GoTrue admin endpoint returns an HTML error page instead of JSON, causing a parse error
 
-**2. Frontend: `Dashboard.tsx`**
-- Change the query `.limit(50)` to `.limit(25)` for fetching stats
-- Change `stats.slice(0, 20)` to use all 25 stats (no slicing needed)
-- Include the `start_time` field in chart data so the X-axis shows game dates instead of match numbers
+### Fix
 
-**3. Frontend: `PerformanceChart.tsx`**
-- Update the `ChartDataPoint` interface to include a `date` string field (formatted date like "Feb 20")
-- Change the XAxis `dataKey` from `"match"` to `"date"` so game dates appear on the X-axis
-- Add angle/formatting to date tick labels so they don't overlap
+Update `supabase/functions/steam-auth/index.ts` to handle the "user already exists" scenario properly:
 
-### Technical Details
+1. Try `signInWithPassword` first (works for users created with current key)
+2. If that fails, use `admin.listUsers` to check if user exists by email
+3. If user exists, update their password with `admin.updateUserById`, then sign in again
+4. If user truly doesn't exist, create them with `admin.createUser`, then sign in
 
-**sync-matches/index.ts** (line 107):
-- `limit=50` becomes `limit=25`
+This makes the auth flow resilient to service role key changes and avoids the HTML error response.
 
-**Dashboard.tsx**:
-- Line 56: `.limit(50)` becomes `.limit(25)`
-- Lines 110-115: Chart data construction adds a `date` field using `format(new Date(m.start_time), "MMM d")` from `date-fns`, and removes the now-unnecessary `match` field
+### File Changed
 
-**PerformanceChart.tsx**:
-- Interface gains `date: string` field
-- XAxis switches to `dataKey="date"` with angled labels (`angle={-45}`, `textAnchor="end"`) and increased bottom margin for readability
-- Tooltip `labelFormatter` shows the date string
+**`supabase/functions/steam-auth/index.ts`** -- lines 75-100 (the auth block):
+- Replace the current "try sign in, else create" logic with a 3-step approach:
+  - Step A: `signInWithPassword` -- if success, done
+  - Step B: `admin.listUsers({ filter: email })` -- check if user exists
+  - Step C: If user found, `admin.updateUserById(id, { password })` then retry sign in
+  - Step D: If user not found, `admin.createUser(...)` then sign in
+- Wrap all admin calls in try/catch to prevent HTML parse errors from crashing the function
+- Keep the rest of the function (Steam verification, profile upsert, redirect) unchanged
 
