@@ -1,166 +1,140 @@
 
 
-## Rebuild: Missing Features from Product Spec
+## Overhaul: New Calculation Engine, Role Groups, Game Mode Labels, and Hero Names
 
-After auditing the codebase against the uploaded specification, here's what already exists and what needs to be built.
+### What's Changing
 
-### Already Implemented
-- Steam OpenID authentication (with redirect fix)
-- Custom scoring engine (role-weighted Map Pressure, Combat, Survival in `sync-matches`)
-- Glassmorphism design system (glass cards, gradients, fluid typography)
-- Dashboard with score cards, performance line chart, match history, game mode toggle
-- Friends leaderboard panel (UI shell, not wired to data)
-
-### Features to Build
+The uploaded PDF defines a completely new scoring system that replaces the current weighted-average-based engine. Here's a summary of every change.
 
 ---
 
-### 1. Hero Dictionary Cache (Edge Function + Database)
+### 1. New Scoring Formulas (from the PDF)
 
-The spec requires a backend job that syncs hero data from OpenDota's `/constants/heroes` endpoint, converting image paths to full Steam CDN URLs. Currently heroes display as "Hero 123".
+The current engine uses role-weighted normalization against baselines. The PDF specifies three explicit formulas:
 
-**Database:**
-- Create a `heroes` table: `id (int PK)`, `name (text)`, `localized_name (text)`, `icon_url (text)`, `image_url (text)`, `updated_at (timestamp)`
-- No RLS needed (public read data)
-
-**Edge Function:** `sync-heroes/index.ts`
-- Fetch `https://api.opendota.com/api/constants/heroes`
-- Convert relative image paths to `https://cdn.cloudflare.steamstatic.com/apps/dota2/images/dota_react/heroes/{name}.png`
-- Upsert all heroes into the `heroes` table
-
-**Update `sync-matches`:**
-- After processing matches, look up hero names from the `heroes` table instead of using "Hero {id}"
-
----
-
-### 2. Tier Badge System (S through F)
-
-The spec requires gamified tier badges based on score thresholds: S (>=90), A (>=80), B (>=70), C (>=60), D (>=50), F (<50).
-
-**New component:** `src/components/dashboard/TierBadge.tsx`
-- Accepts a numeric score, returns a styled badge with the tier letter
-- Tier-specific accent colors: Matte Gold (S), Matte Green (A), Blue (B), Teal (C), Orange (D), Muted Red (F)
-- Glowing effect for S and A tiers
-
-**Integration points:**
-- ScoreCard component: show tier badge below the circular score
-- MatchHistory: replace raw score numbers with tier badges
-- Each match row shows a prominent tier badge for the overall score
-
----
-
-### 3. Three-Way Comparison Engine (New Tab + Edge Function)
-
-The spec requires a dedicated comparison tab where users can query up to 3 Steam IDs and see a Radar Chart overlay.
-
-**Edge Function:** `compare-players/index.ts`
-- Accepts an array of up to 3 Steam IDs
-- Uses `Promise.all()` for concurrent OpenDota API fetches
-- Returns averaged role-weighted scores per player
-- Includes hero and profile data
-
-**New components:**
-- `src/components/compare/CompareTab.tsx` -- main container with 3 Steam ID input fields
-- `src/components/compare/RadarComparison.tsx` -- Recharts RadarChart with overlapping neon accent lines for each player
-- `src/components/compare/PlayerBreakdown.tsx` -- side-by-side role-filtered metric grid below the radar
-
-**Routing:**
-- Add a tab navigation to the Dashboard (Overview | Compare)
-- Or add a `/compare` route
-
-**UI Details:**
-- Responsive CSS Grid layout
-- Glassmorphism cards for each player's breakdown
-- Neon accent lines on the radar (primary, accent, and a third color)
-
----
-
-### 4. Hero Avatars in Match History
-
-Once the heroes table exists:
-- Update MatchHistory to display the official hero portrait image next to each match row
-- Use the `image_url` from the heroes table
-- Lazy-load images for performance
-
----
-
-### 5. Onboarding Flow for First-Time Users
-
-The spec requires a progressive disclosure modal explaining custom metrics.
-
-**New component:** `src/components/onboarding/OnboardingModal.tsx`
-- Multi-step Framer Motion spotlight tour
-- Step 1: Explain Map Pressure metric
-- Step 2: Explain Combat Score metric
-- Step 3: Explain Survival Rate metric
-- Step 4: Explain tier badges (S-F)
-- Uses `localStorage` flag to show only on first visit
-- Frosted glass modal with animated transitions
-
----
-
-### 6. Error State UI Components
-
-The spec calls for graceful degradation states:
-- **API Rate Limit:** Frosted amber banner component
-- **Private Profile:** Informational prompt card
-- **Unparsed Match:** Muted grey overlay on affected match rows
-
-**New component:** `src/components/ui/StatusBanner.tsx`
-- Variants: `rate-limit` (amber), `private-profile` (info), `unparsed` (grey)
-
----
-
-### 7. Wire Up Friends Leaderboard
-
-The leaderboard UI exists but has no data source.
-
-**Edge Function:** `get-friends-leaderboard/index.ts`
-- Accept user's Steam ID
-- Fetch Steam friends list via Steam API
-- Cross-reference with the `users` table to find friends on the platform
-- Query their averaged scores from `player_match_stats`
-- Return sorted leaderboard data
-
-**Dashboard update:**
-- Call this function on mount and populate the existing `FriendsLeaderboard` component
-
----
-
-### Technical Summary
-
+**Impact Score (replaces "Combat Score")**
 ```text
-New database tables:
-  - heroes (id, name, localized_name, icon_url, image_url, updated_at)
-
-New edge functions:
-  - sync-heroes        -- fetches hero dictionary from OpenDota
-  - compare-players    -- concurrent 3-way player comparison
-  - get-friends-leaderboard -- Steam friends cross-referenced with platform
-
-Modified edge functions:
-  - sync-matches       -- resolve hero names from heroes table
-
-New frontend components:
-  - TierBadge.tsx
-  - CompareTab.tsx + RadarComparison.tsx + PlayerBreakdown.tsx
-  - OnboardingModal.tsx
-  - StatusBanner.tsx
-
-Modified frontend components:
-  - Dashboard.tsx      -- add tab navigation (Overview | Compare), wire friends
-  - MatchHistory.tsx   -- add hero avatars, tier badges
-  - ScoreCard.tsx      -- add tier badge display
-  - App.tsx            -- add /compare route if needed
+I = max(0, (K * 2.5) + (A * 1.5) + (TD / 500) - (D * 2.0)) * mode_scalar
 ```
+- K = Kills, A = Assists, TD = Tower Damage, D = Deaths
+- mode_scalar: Standard = 1.0, Turbo = 0.65
+
+**Map Pressure (replaces current Map Pressure)**
+```text
+P = (TD + (LH * mode_scalar)) / (100 * T_minutes)
+```
+- TD = Tower Damage, LH = Last Hits
+- T_minutes = match duration in minutes
+
+**Survival Consistency (replaces "Survival Rate")**
+```text
+S = ((T_match - (D * 35)) / T_match) * 100
+```
+- T_match = match duration in seconds, D = Deaths
+- 35 = estimated average respawn/downtime per death
+
+---
+
+### 2. New Role Groups
+
+Currently the system uses 5 lane roles (Pos 1-5) from OpenDota's `lane_role` field. The PDF consolidates to 3 groups:
+
+| New Group          | OpenDota lane_role values |
+|--------------------|--------------------------|
+| Core (Pos 1/2)     | 1 (Safe Lane), 2 (Mid)   |
+| Offlane (Pos 3)    | 3 (Off Lane)             |
+| Support (Pos 4/5)  | 4 (Jungle/Roam), + fallback for pos 5 detection |
+
+The `lane_role_name` stored in `player_match_stats` will change from "Safe Lane" / "Mid Lane" / "Off Lane" / "Jungle" to "Core" / "Offlane" / "Support".
+
+---
+
+### 3. Role-Based Tier Thresholds (replaces fixed 0-100 scale)
+
+The current TierBadge uses a fixed scale (S >= 90, A >= 80, etc.). The PDF defines role-dependent thresholds for the Impact Score:
+
+| Tier       | Core (Pos 1/2) | Offlane (Pos 3) | Support (Pos 4/5) |
+|------------|-----------------|------------------|--------------------|
+| S-Class    | I >= 30.0       | I >= 26.0        | I >= 22.0          |
+| A-Class    | I >= 20.0       | I >= 18.0        | I >= 14.0          |
+| B-Class    | I >= 12.0       | I >= 10.0        | I >= 8.0           |
+| C-Class    | I < 12.0        | I < 10.0         | I < 8.0            |
+
+Note: The PDF uses 4 tiers (S/A/B/C) instead of the current 6 (S/A/B/C/D/F). The TierBadge will be updated accordingly.
+
+---
+
+### 4. Game Mode Labeling
+
+Ensure matches display consistently as "Ranked", "Normal", or "Turbo":
+- Game mode 22 = "Ranked"
+- Game mode 23 = "Turbo"
+- All others (1, 2, 3, 4, 5, 12, 16) = "Normal"
+
+---
+
+### 5. Hero Names from Heroes Table
+
+The `sync-matches` function already looks up hero names from the `heroes` table, but falls back to "Hero {id}" when the table is empty. This will be fixed by ensuring `sync-heroes` is called before `sync-matches`, and the fallback text is improved.
+
+---
+
+### Files to Modify
+
+**Backend (Edge Functions)**
+
+1. **`supabase/functions/sync-matches/index.ts`** -- Complete rewrite of scoring logic:
+   - Remove the old `ROLE_WEIGHTS`, `BASELINES`, `normalize()`, and `computeScores()` functions
+   - Implement the 3 new formulas: Impact Score, Map Pressure, Survival Consistency
+   - Add `mode_scalar` (1.0 for standard, 0.65 for turbo/mode 23)
+   - Map `lane_role` to new role groups: Core / Offlane / Support
+   - Update `GAME_MODE_NAMES` to output "Ranked", "Normal", "Turbo"
+   - Store Impact Score in `combat_score` column, Pressure in `map_pressure_score`, Survival in `survival_rate`
+   - Auto-call `sync-heroes` if hero table is empty before processing
+
+2. **`supabase/functions/compare-players/index.ts`** -- No formula changes needed, just reads averages from DB. Already correct.
+
+**Frontend Components**
+
+3. **`src/components/dashboard/TierBadge.tsx`** -- Update to:
+   - Accept a `role` prop (Core / Offlane / Support) and use role-dependent thresholds for Impact Score
+   - For Map Pressure and Survival (which don't have role thresholds in the PDF), keep a simplified scale
+   - Reduce to 4 tiers: S, A, B, C
+   - Update colors: S = Gold, A = Green, B = Blue, C = Muted Red
+
+4. **`src/components/dashboard/ScoreCard.tsx`** -- Pass role context to TierBadge for the Impact Score card
+
+5. **`src/components/dashboard/MatchHistory.tsx`** -- Pass role to TierBadge for per-match tier display
+
+6. **`src/components/dashboard/GameModeToggle.tsx`** -- Labels already correct ("Ranked", "Normal", "Turbo"). No changes.
+
+7. **`src/pages/Dashboard.tsx`** -- Update score card labels:
+   - "Combat Score" becomes "Impact Score"
+   - Icons remain the same
+   - Pass dominant role group to TierBadge
+
+8. **`src/components/dashboard/PerformanceChart.tsx`** -- Rename "Combat" line to "Impact"
+
+9. **`src/components/compare/RadarComparison.tsx`** -- Rename "Combat" axis to "Impact"
+
+10. **`src/components/onboarding/OnboardingModal.tsx`** -- Update metric descriptions to match the new formulas
+
+11. **`src/components/compare/PlayerBreakdown.tsx`** -- Rename "Combat" to "Impact"
+
+**Database**
+
+12. **No schema migration needed** -- The existing `map_pressure_score`, `combat_score`, and `survival_rate` columns in `player_match_stats` will store the new formula outputs. The column names stay the same; only the computed values change.
+
+13. **Existing match data** -- Previously synced matches will have old scores. On next sync, new matches use new formulas. A one-time re-sync will recalculate all matches (since the edge function skips already-existing match IDs, we may want to add a `force` flag to re-process).
+
+---
 
 ### Implementation Order
 
-1. Heroes table + sync-heroes function (unblocks hero images everywhere)
-2. TierBadge component (small, reusable, unblocks other UI)
-3. Update MatchHistory and ScoreCard with hero images and tier badges
-4. Compare engine (edge function + UI)
-5. Friends leaderboard wiring
-6. Onboarding modal
-7. Error state banners
+1. Update `sync-matches` edge function with new formulas, role groups, and game mode labels
+2. Update `TierBadge` with role-dependent thresholds and 4 tiers
+3. Update `Dashboard`, `ScoreCard`, `MatchHistory` to use "Impact Score" naming and pass role
+4. Update `PerformanceChart`, `RadarComparison`, `PlayerBreakdown`, `OnboardingModal` labels
+5. Deploy edge function and test
+6. Optionally add a "force re-sync" button to recalculate old match scores
 
