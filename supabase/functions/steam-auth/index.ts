@@ -72,31 +72,50 @@ serve(async (req: Request) => {
       const email = `steam_${steamId}@dota2analytics.local`;
       const password = `steam_${steamId}_${SUPABASE_SERVICE_ROLE_KEY.slice(0, 8)}`;
 
-      // Try to sign in first
+      // Step A: Try to sign in first
       let { data: signInData, error: signInError } = await supabaseAdmin.auth.signInWithPassword({
         email,
         password,
       });
 
       if (signInError) {
-        // Create account
-        const { data: signUpData, error: signUpError } = await supabaseAdmin.auth.admin.createUser({
-          email,
-          password,
-          email_confirm: true,
-          user_metadata: { steam_id: steamId, persona_name: player?.personaname },
-        });
+        // Step B: Check if user already exists
+        try {
+          const { data: listData } = await supabaseAdmin.auth.admin.listUsers();
+          const existingUser = listData?.users?.find((u) => u.email === email);
 
-        if (signUpError) {
-          return new Response(`Auth error: ${signUpError.message}`, { status: 500, headers: corsHeaders });
+          if (existingUser) {
+            // Step C: User exists but password changed — update password and retry
+            await supabaseAdmin.auth.admin.updateUserById(existingUser.id, { password });
+            const { data: retrySignIn, error: retryError } = await supabaseAdmin.auth.signInWithPassword({
+              email,
+              password,
+            });
+            if (retryError) {
+              return new Response(`Auth retry error: ${retryError.message}`, { status: 500, headers: corsHeaders });
+            }
+            signInData = retrySignIn;
+          } else {
+            // Step D: User truly doesn't exist — create them
+            const { data: signUpData, error: signUpError } = await supabaseAdmin.auth.admin.createUser({
+              email,
+              password,
+              email_confirm: true,
+              user_metadata: { steam_id: steamId, persona_name: player?.personaname },
+            });
+            if (signUpError) {
+              return new Response(`Auth create error: ${signUpError.message}`, { status: 500, headers: corsHeaders });
+            }
+            const { data: newSignIn } = await supabaseAdmin.auth.signInWithPassword({
+              email,
+              password,
+            });
+            signInData = newSignIn;
+          }
+        } catch (adminErr) {
+          console.error("Admin API error:", adminErr);
+          return new Response(`Admin API error: ${adminErr.message}`, { status: 500, headers: corsHeaders });
         }
-
-        // Sign in the newly created user
-        const { data: newSignIn } = await supabaseAdmin.auth.signInWithPassword({
-          email,
-          password,
-        });
-        signInData = newSignIn;
       }
 
       const userId = signInData?.user?.id;
