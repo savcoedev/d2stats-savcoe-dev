@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
+import { format } from "date-fns";
 import { motion } from "framer-motion";
 import { Shield, Sword, Heart } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
@@ -53,7 +54,7 @@ const Dashboard = () => {
       .eq("user_id", profile.id)
       .in("game_mode", modes)
       .order("start_time", { ascending: false })
-      .limit(50);
+      .limit(25);
     setStats(data ?? []);
   }, [profile, mode]);
 
@@ -107,8 +108,8 @@ const Dashboard = () => {
   const dominantRole = (Object.entries(roleCounts).sort((a, b) => b[1] - a[1])[0]?.[0] ?? "Core") as "Core" | "Offlane" | "Support";
 
   // Chart data
-  const chartData = stats.slice(0, 20).reverse().map((m, i) => ({
-    match: i + 1,
+  const chartData = [...stats].reverse().map((m) => ({
+    date: m.start_time ? format(new Date(m.start_time), "MMM d") : "",
     mapPressure: m.map_pressure_score ?? 0,
     impact: m.combat_score ?? 0,
     survival: m.survival_rate ?? 0,

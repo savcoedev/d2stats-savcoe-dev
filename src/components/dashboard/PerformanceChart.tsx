@@ -2,7 +2,7 @@ import { motion } from "framer-motion";
 import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid } from "recharts";
 
 interface ChartDataPoint {
-  match: number;
+  date: string;
   mapPressure: number;
   impact: number;
   survival: number;
@@ -11,6 +11,12 @@ interface ChartDataPoint {
 interface PerformanceChartProps {
   data: ChartDataPoint[];
 }
+
+const AngledTick = ({ x, y, payload }: any) => (
+  <text x={x} y={y} dy={10} textAnchor="end" fill="hsl(215 12% 55%)" fontSize={11} transform={`rotate(-45, ${x}, ${y})`}>
+    {payload.value}
+  </text>
+);
 
 const PerformanceChart = ({ data }: PerformanceChartProps) => {
   return (
@@ -26,9 +32,10 @@ const PerformanceChart = ({ data }: PerformanceChartProps) => {
           <LineChart data={data}>
             <CartesianGrid strokeDasharray="3 3" stroke="hsl(220 15% 20%)" />
             <XAxis
-              dataKey="match"
-              tick={{ fontSize: 12, fill: "hsl(215 12% 55%)" }}
+              dataKey="date"
+              tick={<AngledTick />}
               axisLine={{ stroke: "hsl(220 15% 20%)" }}
+              height={60}
             />
             <YAxis
               domain={[0, 100]}
