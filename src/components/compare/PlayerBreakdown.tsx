@@ -52,7 +52,7 @@ const PlayerBreakdown = ({ players }: PlayerBreakdownProps) => {
           </div>
           <div className="space-y-3">
             <StatRow label="Map Pressure" value={p.avg_map_pressure ?? 0} />
-            <StatRow label="Combat Score" value={p.avg_combat ?? 0} />
+            <StatRow label="Impact Score" value={p.avg_combat ?? 0} />
             <StatRow label="Survival Rate" value={p.avg_survival ?? 0} />
           </div>
         </motion.div>

@@ -9,25 +9,25 @@ const steps = [
   {
     icon: Shield,
     title: "Map Pressure",
-    desc: "Measures your tower damage, last hits, denies, and GPM — weighted by your assigned role. A Pos 5 support isn't penalized for lower farm.",
+    desc: "Measures your lane impact: P = (Tower Damage + Last Hits × mode scalar) / (100 × match minutes). Turbo games use a 0.65 scalar to stay fair.",
     color: "hsl(200 70% 55%)",
   },
   {
     icon: Sword,
-    title: "Combat Score",
-    desc: "Tracks hero damage, kills, and assists with role-specific weights. Supports get credit for fight participation, carries for damage output.",
+    title: "Impact Score",
+    desc: "Your fight contribution: I = max(0, K×2.5 + A×1.5 + TD/500 − D×2.0) × mode scalar. Dying is costly — but kills and tower damage pay off big.",
     color: "hsl(280 45% 55%)",
   },
   {
     icon: Heart,
-    title: "Survival Rate",
-    desc: "Combines death penalty with healing output. Dying less matters more for carries; healing output matters more for supports.",
+    title: "Survival Consistency",
+    desc: "How much of the match you stayed alive: S = ((match duration − deaths × 35s) / match duration) × 100. Fewer deaths = higher score.",
     color: "hsl(142 55% 45%)",
   },
   {
     icon: Award,
     title: "Tier Badges",
-    desc: "Your scores translate to gamified grades: S (≥90), A (≥80), B (≥70), C (≥60), D (≥50), F (<50). Aim for that gold S-Tier badge!",
+    desc: "Impact tiers vary by role — Cores need ≥30 for S-Class, Supports need ≥22. Four tiers: S (Gold), A (Green), B (Blue), C (Red).",
     color: "hsl(43 70% 55%)",
   },
 ];
@@ -90,7 +90,6 @@ const OnboardingModal = () => {
               <p className="text-sm text-muted-foreground leading-relaxed">{current.desc}</p>
             </div>
 
-            {/* Step dots */}
             <div className="flex gap-2">
               {steps.map((_, i) => (
                 <div

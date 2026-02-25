@@ -17,7 +17,7 @@ const COLORS = ["hsl(200 70% 55%)", "hsl(280 45% 55%)", "hsl(142 55% 45%)"];
 const RadarComparison = ({ players }: RadarComparisonProps) => {
   const data = [
     { metric: "Map Pressure", ...Object.fromEntries(players.map((p, i) => [`p${i}`, p.avg_map_pressure])) },
-    { metric: "Combat", ...Object.fromEntries(players.map((p, i) => [`p${i}`, p.avg_combat])) },
+    { metric: "Impact", ...Object.fromEntries(players.map((p, i) => [`p${i}`, p.avg_combat])) },
     { metric: "Survival", ...Object.fromEntries(players.map((p, i) => [`p${i}`, p.avg_survival])) },
   ];
 
