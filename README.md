@@ -1,73 +1,91 @@
-# Welcome to your Lovable project
+# D2Stats
 
-## Project info
+**Role-aware analytics for Dota 2 players.**
 
-**URL**: https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID
+🔗 Live: https://d2stats-savcoe-dev.lovable.app
 
-## How can I edit this code?
+---
 
-There are several ways of editing your application.
+## Overview
 
-**Use Lovable**
+KDA flattens every player into the same yardstick — a support warding the map and a carry farming a lane get judged identically, so post-game stats rarely reflect actual contribution. **D2Stats** ingests recent matches via the OpenDota API, classifies each game by lane role, and scores it across three dimensions — **Impact**, **Map Pressure**, and **Survival** — weighted to that role and game mode. Every score exposes its formula and live inputs, so players see exactly what drove the grade.
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and start prompting.
+## Features
 
-Changes made via Lovable will be committed automatically to this repo.
+- **Role-aware scoring** — separate weighting for Core, Offlane, and Support
+- **Three-axis grading** — Impact, Map Pressure, Survival (instead of a single KDA number)
+- **4-tier system** — S / A / B / C, with thresholds tuned per role group
+- **Transparent formulas** — every grade exposes the math and the match-specific inputs that produced it
+- **Recency-weighted analysis** — last 25 matches per sync, weighted toward recent games
+- **3-way radar comparison** — overlay your metrics against two other players
+- **Friends leaderboard** — ranks registered users among your Steam friends
+- **Game-mode segregation** — Ranked, Normal, and Turbo handled separately (with Turbo scaling)
 
-**Use your preferred IDE**
+## Tech Stack
 
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
+**Frontend** — React 18 · TypeScript · Vite · Tailwind CSS · Framer Motion · shadcn/ui · Recharts
+**Backend** — Supabase (Postgres, Auth, Edge Functions)
+**Integrations** — Steam OpenID · OpenDota API
 
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
+## Architecture
 
-Follow these steps:
+```text
+        ┌──────────────────┐
+        │   React Client   │
+        │  (Vite + TS)     │
+        └────────┬─────────┘
+                 │  JWT
+        ┌────────▼─────────┐
+        │  Edge Functions  │
+        │  (Deno / Supabase)│
+        └──┬────────┬───────┘
+           │        │
+   ┌───────▼──┐  ┌──▼─────────┐  ┌──────────────┐
+   │ OpenDota │  │ Steam      │  │ Supabase DB  │
+   │   API    │  │ OpenID     │  │ (Postgres+RLS)│
+   └──────────┘  └────────────┘  └──────────────┘
+```
+
+## Engineering Highlights
+
+- **Steam OpenID → Supabase Auth bridge** — custom edge function exchanges Steam identity for a Supabase session
+- **Hardened edge functions** — JWT validation on every sensitive endpoint; `steam_id` is server-derived from the token to prevent identity spoofing
+- **Open-redirect protection** — `redirect_uri` is validated against an origin allowlist before being reflected back to the caller
+- **Transparent scoring** — every metric in the UI links back to its formula and per-match inputs; no black-box grades
+- **60 fps motion** — transform/opacity-only animations across the app, glassmorphism surfaces with matte off-white/off-blue palette
+
+## Local Development
 
 ```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
-
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
-
-# Step 3: Install the necessary dependencies.
-npm i
-
-# Step 4: Start the development server with auto-reloading and an instant preview.
+git clone <your-repo-url>
+cd d2stats
+npm install
 npm run dev
 ```
 
-**Edit a file directly in GitHub**
+Backend env vars (`VITE_SUPABASE_URL`, `VITE_SUPABASE_PUBLISHABLE_KEY`) are auto-provisioned via Lovable Cloud.
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+## Project Structure
 
-**Use GitHub Codespaces**
+```text
+src/
+├─ pages/              Landing · Dashboard · NotFound
+├─ components/
+│  ├─ dashboard/       Score cards, tier badges, match history, leaderboard
+│  ├─ compare/         3-way radar + per-player breakdown
+│  ├─ onboarding/      Progressive tour
+│  └─ ui/              shadcn primitives
+├─ contexts/           AuthContext (Steam-backed Supabase session)
+└─ integrations/supabase/
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
+supabase/functions/
+├─ steam-auth/             Steam OpenID → Supabase session bridge
+├─ sync-matches/           OpenDota match ingest (25-game window)
+├─ sync-heroes/            Hero metadata sync
+├─ compare-players/        3-way comparison aggregation
+└─ get-friends-leaderboard/ Steam friends ∩ registered users
+```
 
-## What technologies are used for this project?
+## License
 
-This project is built with:
-
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
-
-## How can I deploy this project?
-
-Simply open [Lovable](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and click on Share -> Publish.
-
-## Can I connect a custom domain to my Lovable project?
-
-Yes, you can!
-
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
-
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)
+MIT
