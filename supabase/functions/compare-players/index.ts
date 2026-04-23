@@ -3,8 +3,12 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
+
+const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
+const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!;
+const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
 serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
@@ -12,20 +16,41 @@ serve(async (req: Request) => {
   }
 
   try {
+    // Require auth
+    const authHeader = req.headers.get("Authorization") ?? "";
+    if (!authHeader.startsWith("Bearer ")) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+        status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    const userClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+      global: { headers: { Authorization: authHeader } },
+    });
+    const token = authHeader.replace("Bearer ", "");
+    const { data: claimsData, error: claimsErr } = await userClient.auth.getClaims(token);
+    if (claimsErr || !claimsData?.claims) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+        status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     const { steam_ids } = await req.json();
     if (!Array.isArray(steam_ids) || steam_ids.length < 1 || steam_ids.length > 3) {
       return new Response(JSON.stringify({ error: "Provide 1-3 steam_ids" }), {
         status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
+    // Validate each id is a numeric string of reasonable length
+    const validIds = steam_ids.every((s: unknown) => typeof s === "string" && /^[0-9]{6,20}$/.test(s));
+    if (!validIds) {
+      return new Response(JSON.stringify({ error: "Invalid steam_id format" }), {
+        status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
 
-    const supabaseAdmin = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
-    );
+    const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
     const results = await Promise.all(steam_ids.map(async (steamId: string) => {
-      // Get user
       const { data: user } = await supabaseAdmin
         .from("users")
         .select("id, persona_name, avatar_url, steam_id")
@@ -34,7 +59,6 @@ serve(async (req: Request) => {
 
       if (!user) return { steam_id: steamId, found: false };
 
-      // Get their stats (last 50 ranked)
       const { data: stats } = await supabaseAdmin
         .from("player_match_stats")
         .select("map_pressure_score, combat_score, survival_rate")
