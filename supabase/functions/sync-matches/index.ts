@@ -58,28 +58,42 @@ serve(async (req: Request) => {
   }
 
   try {
-    const { steam_id } = await req.json();
-    if (!steam_id) {
-      return new Response(JSON.stringify({ error: "steam_id required" }), {
-        status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+    // Require auth
+    const authHeader = req.headers.get("Authorization") ?? "";
+    if (!authHeader.startsWith("Bearer ")) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+        status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
+    const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!;
+    const userClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+      global: { headers: { Authorization: authHeader } },
+    });
+    const token = authHeader.replace("Bearer ", "");
+    const { data: claimsData, error: claimsErr } = await userClient.auth.getClaims(token);
+    if (claimsErr || !claimsData?.claims) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+        status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    const authUid = claimsData.claims.sub;
 
     const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
+    // Derive steam_id from DB based on the authenticated user; ignore client input
     const { data: userRecord } = await supabaseAdmin
       .from("users")
-      .select("id")
-      .eq("steam_id", steam_id)
+      .select("id, steam_id")
+      .eq("auth_uid", authUid)
       .single();
 
-    if (!userRecord) {
+    if (!userRecord || !userRecord.steam_id) {
       return new Response(JSON.stringify({ error: "User not found" }), {
         status: 404,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
+    const steam_id = userRecord.steam_id;
 
     // Load hero dictionary — auto-sync if empty
     let { data: heroRows } = await supabaseAdmin.from("heroes").select("id, localized_name");

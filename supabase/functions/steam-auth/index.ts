@@ -10,6 +10,31 @@ const STEAM_API_KEY = Deno.env.get("STEAM_API_KEY")!;
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
+// Allowlist of permitted redirect origins. Anything outside this list is rejected
+// to prevent open-redirect token theft attacks.
+const DEFAULT_ALLOWED_ORIGINS = [
+  "https://id-preview--068b2a40-587e-4e39-9099-94c97c507c25.lovable.app",
+  "https://d2stats-savcoe-dev.lovable.app",
+  "http://localhost:5173",
+  "http://localhost:8080",
+];
+const ALLOWED_ORIGINS = [
+  ...DEFAULT_ALLOWED_ORIGINS,
+  ...(Deno.env.get("APP_ORIGIN") ? [Deno.env.get("APP_ORIGIN")!] : []),
+  ...(Deno.env.get("ALLOWED_REDIRECT_ORIGINS")?.split(",").map((s) => s.trim()).filter(Boolean) ?? []),
+];
+
+function isAllowedRedirect(uri: string | null): boolean {
+  if (!uri) return false;
+  try {
+    const parsed = new URL(uri);
+    const origin = `${parsed.protocol}//${parsed.host}`;
+    return ALLOWED_ORIGINS.includes(origin);
+  } catch {
+    return false;
+  }
+}
+
 serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -21,6 +46,9 @@ serve(async (req: Request) => {
   // Step 1: Redirect user to Steam OpenID
   if (action === "login") {
     const redirectUri = url.searchParams.get("redirect_uri") || "";
+    if (!isAllowedRedirect(redirectUri)) {
+      return new Response("Invalid redirect_uri", { status: 400, headers: corsHeaders });
+    }
     const returnUrl = `${SUPABASE_URL}/functions/v1/steam-auth?action=callback&redirect_uri=${encodeURIComponent(redirectUri)}`;
     const params = new URLSearchParams({
       "openid.ns": "http://specs.openid.net/auth/2.0",
@@ -138,8 +166,12 @@ serve(async (req: Request) => {
       const accessToken = signInData?.session?.access_token;
       const refreshToken = signInData?.session?.refresh_token;
       
-      // Use redirect_uri passed through the flow, fallback to APP_ORIGIN env var
-      const appOrigin = url.searchParams.get("redirect_uri") || Deno.env.get("APP_ORIGIN") || url.origin;
+      // Validate redirect_uri against allowlist before issuing tokens
+      const requestedRedirect = url.searchParams.get("redirect_uri");
+      if (!isAllowedRedirect(requestedRedirect)) {
+        return new Response("Invalid redirect_uri", { status: 400, headers: corsHeaders });
+      }
+      const appOrigin = requestedRedirect!;
       const redirectUrl = `${appOrigin}/#access_token=${accessToken}&refresh_token=${refreshToken}&type=steam`;
 
       return Response.redirect(redirectUrl, 302);

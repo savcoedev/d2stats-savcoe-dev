@@ -3,8 +3,12 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
+
+const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
+const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!;
+const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
 serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
@@ -12,17 +16,45 @@ serve(async (req: Request) => {
   }
 
   try {
-    const { steam_id } = await req.json();
-    if (!steam_id) {
-      return new Response(JSON.stringify({ error: "steam_id required" }), {
-        status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+    // Require auth
+    const authHeader = req.headers.get("Authorization") ?? "";
+    if (!authHeader.startsWith("Bearer ")) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+        status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
+    const userClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+      global: { headers: { Authorization: authHeader } },
+    });
+    const token = authHeader.replace("Bearer ", "");
+    const { data: claimsData, error: claimsErr } = await userClient.auth.getClaims(token);
+    if (claimsErr || !claimsData?.claims) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+        status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    const authUid = claimsData.claims.sub;
 
     const STEAM_API_KEY = Deno.env.get("STEAM_API_KEY");
     if (!STEAM_API_KEY) {
       return new Response(JSON.stringify({ error: "STEAM_API_KEY not configured" }), {
         status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+
+    // Derive caller's steam_id from DB; ignore any client-supplied value
+    const { data: callerRow } = await supabaseAdmin
+      .from("users")
+      .select("steam_id")
+      .eq("auth_uid", authUid)
+      .single();
+
+    const steam_id = callerRow?.steam_id;
+    if (!steam_id) {
+      return new Response(JSON.stringify({ error: "User profile not found" }), {
+        status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
@@ -46,12 +78,6 @@ serve(async (req: Request) => {
       });
     }
 
-    const supabaseAdmin = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
-    );
-
-    // Find friends who are on the platform
     const { data: platformFriends } = await supabaseAdmin
       .from("users")
       .select("id, steam_id, persona_name, avatar_url")
@@ -63,7 +89,6 @@ serve(async (req: Request) => {
       });
     }
 
-    // Get averaged scores for each friend
     const results = await Promise.all(platformFriends.map(async (friend) => {
       const { data: stats } = await supabaseAdmin
         .from("player_match_stats")
