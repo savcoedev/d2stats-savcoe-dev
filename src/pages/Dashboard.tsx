@@ -66,7 +66,7 @@ const Dashboard = () => {
     if (!profile?.steam_id) return;
     setFriendsLoading(true);
     supabase.functions.invoke("get-friends-leaderboard", {
-      body: { steam_id: profile.steam_id },
+      body: {},
     }).then(({ data }) => {
       if (data?.friends) setFriends(data.friends);
       setFriendsLoading(false);
@@ -79,7 +79,7 @@ const Dashboard = () => {
     setSyncError(null);
     try {
       const { data, error } = await supabase.functions.invoke("sync-matches", {
-        body: { steam_id: profile.steam_id },
+        body: {},
       });
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
