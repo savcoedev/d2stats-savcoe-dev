@@ -1,51 +1,49 @@
-## Tooltips, Match Dates & High-Fidelity Polish
+## Match History: Expose Breakdown + Responsive Layout
 
-### 1. Formula Tooltips on Score Bars (per match)
+The previous round added tooltips, dates, gradient rails, shimmer bars, and a count chip. This round addresses the two gaps that remain: tooltips are hover-only (unusable on touch), and the row overflows on small screens.
 
-In `MatchHistory.tsx`, wrap each `ScoreBar` (Map Pressure, Impact, Survival) inside the expanded match panel with a Radix `Tooltip` that explains the formula using **the actual numbers from that match**.
+### 1. Expose Calculation Breakdown (always visible on demand)
 
-Tooltip content per metric (uses `kills/deaths/assists`, `duration`, plus the stored score):
+The score formula and live numeric breakdown are currently buried inside a hover tooltip on each `ScoreBar`. On touch devices the tooltip never opens, so the calculation is effectively hidden.
 
-- **Impact Score**
-  - Formula: `max(0, (K × 2.5) + (A × 1.5) + (TD ÷ 500) − (D × 2.0)) × mode_scalar`
-  - Live values: `K=${kills}, A=${assists}, D=${deaths}` and the resulting score
-  - Note: Turbo applies a 0.65 scalar
-- **Map Pressure**
-  - Formula: `(TD + LH × mode_scalar) ÷ duration_minutes`
-  - Live values: duration in minutes, resulting score
-- **Survival Consistency**
-  - Formula: `((duration_sec − D × 35) ÷ duration_sec) × 100`
-  - Live values: duration, deaths, resulting %
+Add a persistent "Show calculation" affordance inside the expanded match panel:
 
-Tooltips trigger on hover **and** focus (keyboard accessible), use the existing `glass-card` styling with a subtle border-glow, and render via a single `TooltipProvider` wrapping the match list.
+- Below the three `ScoreBar` components, render a **"How these scores are calculated"** collapsible section (closed by default, uses `framer-motion` height animation matching the row expand pattern).
+- When opened, render a 3-column grid (stacks to 1 column on mobile) showing each metric's:
+  - Metric name + colored icon
+  - Formula in a monospaced chip
+  - Live breakdown table (the same `breakdown` array currently in the tooltip): K, A, D, TD, LH, Duration, Lost Time, final Score
+  - Mode-scalar note for Impact (Turbo = 0.65)
+- Toggle is a small ghost button: `Calculator` icon + "Show calculation" / "Hide calculation", right-aligned under the bars.
+- Keep the existing hover tooltips on `ScoreBar` for desktop quick-glance — they remain useful but are no longer the only way to see the breakdown.
 
-### 2. Match Date in Match Row
+### 2. Responsive Match Layout
 
-The collapsed match row currently shows hero name, role, K/D/A, and duration but **no date**. Add a right-aligned date next to the duration:
+The collapsed row currently lays out hero portrait, hero name, role chip, game mode, K/D/A, duration, date, tier badge, and chevron in a single horizontal flex. Below ~640px this wraps awkwardly and the tier badge gets pushed off the visual grid.
 
-- Format: `MMM d` for matches in the last year (e.g., "Apr 18"), `MMM d, yyyy` otherwise
-- Source: `match.start_time`
-- Style: `text-xs text-muted-foreground` with a small `Calendar` icon from `lucide-react`
-- Place inline with the K/D/A · duration metadata row
+Refactor the row into a responsive two-zone grid:
 
-### 3. High-Fidelity Visual Elements
+- **Mobile (`<sm`)**:
+  - Row 1: accent rail, hero portrait, hero name + role chip, tier badge, chevron (right-aligned)
+  - Row 2 (indented under hero): K/D/A · duration · date · game mode — wraps cleanly with `flex-wrap gap-x-3 gap-y-1`
+  - Reduce horizontal padding from `px-6` to `px-4` on `<sm`
+- **Desktop (`≥sm`)**: keep the current single-row layout but use `min-w-0` + `truncate` on the hero name, and `shrink-0` on the tier badge + chevron so nothing overflows.
 
-Subtle upgrades focused on the match list and expanded panel — no architectural changes:
+Expanded panel:
+- Score bars grid stays `sm:grid-cols-3` but gains `gap-4 sm:gap-5` and reduced horizontal padding on mobile (`px-4 sm:px-6`).
+- The new calculation breakdown section uses `grid-cols-1 md:grid-cols-3` so it stacks cleanly on phones and tablets in portrait.
 
-- **Win/loss accent rail**: replace the flat 1px bar with a vertical gradient (win: emerald → cyan; loss: rose → orange) plus a soft outer glow when the row is expanded.
-- **Hero portrait**: add a 1px ring matching the win/loss color, slight rounded-lg, and a hover scale (`scale-105`) with `transition-transform`.
-- **Row hover**: layer a faint radial gradient highlight (top-left primary glow) on hover instead of the flat `bg-secondary/30`.
-- **Expanded panel**: add a top inner-shadow divider, increase padding, and give each `ScoreBar` track a subtle inset shadow + an animated shimmer on the filled portion (CSS gradient sweep, 2.4s loop, low opacity).
-- **Score bar end-caps**: add a small glowing dot at the end of each filled bar in the metric color.
-- **Tier badge in expanded view**: add the existing `glow` already present; bump to `md` size for clarity.
-- **Section header**: give the "Match History" header a small accent underline (`text-gradient` rule already exists) and a count chip showing total matches synced.
-- **Card chrome**: apply `glow-border` to the MatchHistory card for a premium framed look.
+Section header:
+- Title + count chip stay left; on mobile reduce to `text-sm` and tighten padding (`p-4 sm:p-6`).
 
-### Files Changed
+### Technical Details
 
-- `src/components/dashboard/MatchHistory.tsx` — add tooltips, match date, visual upgrades, count chip, gradient accents, shimmer bars
-- `src/App.tsx` (or wherever providers live) — confirm a single `TooltipProvider` is mounted; add one inside MatchHistory if not
+**File changed:** `src/components/dashboard/MatchHistory.tsx`
 
-### Files NOT Changed
+- Add per-row state `showCalc: boolean` (track inside `expandedId` panel via a separate `calcOpenId` state, or local state per panel).
+- Extract a `CalculationBreakdown` subcomponent that takes the same `breakdown`, `formula`, `label`, `color`, `icon`, `note` props the tooltip uses, so the data source is shared with the tooltips (single source of truth).
+- Use `Calculator` icon from `lucide-react` for the toggle.
+- Apply Tailwind responsive classes (`px-4 sm:px-6`, `flex-col sm:flex-row`, `hidden sm:flex`, `min-w-0`, `truncate`, `shrink-0`) — no new dependencies.
+- Animation: `motion.div` with `initial={{ height: 0, opacity: 0 }}` → `animate={{ height: "auto", opacity: 1 }}`, 250ms easeOut, animating only height + opacity to keep 60fps.
 
-- Scoring engine, sync function, database schema, ScoreCard, PerformanceChart — out of scope for this request.
+**Files NOT changed:** scoring engine, sync function, database schema, ScoreCard, PerformanceChart, TierBadge, tooltip primitive.
