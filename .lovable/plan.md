@@ -1,49 +1,75 @@
-## Match History: Expose Breakdown + Responsive Layout
+# D2Stats — One-Page PDF Case Study
 
-The previous round added tooltips, dates, gradient rails, shimmer bars, and a count chip. This round addresses the two gaps that remain: tooltips are hover-only (unusable on touch), and the row overflows on small screens.
+A single-page, editorial/magazine-style PDF portfolio case study summarizing D2Stats. No repo link, qualitative + illustrative metrics drawn from real app facts only.
 
-### 1. Expose Calculation Breakdown (always visible on demand)
+## Format
+- **File:** `/mnt/documents/d2stats-case-study.pdf`
+- **Size:** US Letter portrait, generous margins (~0.75")
+- **Tone:** Editorial — serif display headline, clean sans body, restrained accent color, lots of whitespace
+- **Tooling:** ReportLab (Platypus + Canvas) in a Python script run via `code--exec`
 
-The score formula and live numeric breakdown are currently buried inside a hover tooltip on each `ScoreBar`. On touch devices the tooltip never opens, so the calculation is effectively hidden.
+## Page Layout (top → bottom)
 
-Add a persistent "Show calculation" affordance inside the expanded match panel:
+```text
+┌─────────────────────────────────────────────────────┐
+│  CASE STUDY · 2025                  D2STATS         │  ← eyebrow row
+│                                                     │
+│  Role-aware analytics                               │
+│  for Dota 2 players.                                │  ← serif headline
+│                                                     │
+│  ───────                                            │
+│                                                     │
+│  THE PROBLEM        THE SOLUTION                    │  ← two-column body
+│  [paragraph]        [paragraph]                     │
+│                                                     │
+│  MEASURABLE VALUE                                   │
+│  ┌────┬────┬────┬────┐                              │
+│  │ 25 │ 3  │ 4  │ 60 │   stat tiles + captions     │
+│  └────┴────┴────┴────┘                              │
+│                                                     │
+│  STACK         |  HIGHLIGHTS                        │
+│  React · TS …  |  · Steam OpenID → Supabase bridge  │
+│                |  · Hardened edge fns (JWT)         │
+│                |  · Transparent score formulas      │
+│                                                     │
+│  ───────                                            │
+│  Live  →  d2stats-savcoe-dev.lovable.app            │  ← footer
+└─────────────────────────────────────────────────────┘
+```
 
-- Below the three `ScoreBar` components, render a **"How these scores are calculated"** collapsible section (closed by default, uses `framer-motion` height animation matching the row expand pattern).
-- When opened, render a 3-column grid (stacks to 1 column on mobile) showing each metric's:
-  - Metric name + colored icon
-  - Formula in a monospaced chip
-  - Live breakdown table (the same `breakdown` array currently in the tooltip): K, A, D, TD, LH, Duration, Lost Time, final Score
-  - Mode-scalar note for Impact (Turbo = 0.65)
-- Toggle is a small ghost button: `Calculator` icon + "Show calculation" / "Hide calculation", right-aligned under the bars.
-- Keep the existing hover tooltips on `ScoreBar` for desktop quick-glance — they remain useful but are no longer the only way to see the breakdown.
+## Content
 
-### 2. Responsive Match Layout
+**Headline:** "Role-aware analytics for Dota 2 players."
 
-The collapsed row currently lays out hero portrait, hero name, role chip, game mode, K/D/A, duration, date, tier badge, and chevron in a single horizontal flex. Below ~640px this wraps awkwardly and the tier badge gets pushed off the visual grid.
+**Problem (~50 words):** KDA flattens every player into the same yardstick. A support warding the map and a carry farming a lane get judged identically, so post-game stats rarely reflect actual contribution — leaving players without a meaningful read on whether they're improving.
 
-Refactor the row into a responsive two-zone grid:
+**Solution (~60 words):** D2Stats ingests recent matches via the OpenDota API, classifies each game by lane role, and scores it across three dimensions — Impact, Map Pressure, Survival — weighted to that role and game mode. Every score exposes its formula and live inputs, so players see exactly what drove the grade.
 
-- **Mobile (`<sm`)**:
-  - Row 1: accent rail, hero portrait, hero name + role chip, tier badge, chevron (right-aligned)
-  - Row 2 (indented under hero): K/D/A · duration · date · game mode — wraps cleanly with `flex-wrap gap-x-3 gap-y-1`
-  - Reduce horizontal padding from `px-6` to `px-4` on `<sm`
-- **Desktop (`≥sm`)**: keep the current single-row layout but use `min-w-0` + `truncate` on the hero name, and `shrink-0` on the tier badge + chevron so nothing overflows.
+**Measurable value (illustrative tiles, all grounded in real app facts):**
+- **25** — match window analyzed per sync (recency-weighted)
+- **3** — contextual score dimensions (Impact, Map Pressure, Survival)
+- **4** — performance tiers (S / A / B / C) tuned per role group
+- **60 fps** — transform/opacity-only animations across the UI
 
-Expanded panel:
-- Score bars grid stays `sm:grid-cols-3` but gains `gap-4 sm:gap-5` and reduced horizontal padding on mobile (`px-4 sm:px-6`).
-- The new calculation breakdown section uses `grid-cols-1 md:grid-cols-3` so it stacks cleanly on phones and tablets in portrait.
+**Stack:** React 18 · TypeScript · Vite · Tailwind · Framer Motion · Recharts · Supabase · Steam OpenID · OpenDota
 
-Section header:
-- Title + count chip stay left; on mobile reduce to `text-sm` and tighten padding (`p-4 sm:p-6`).
+**Engineering highlights (3 bullets):**
+- Custom Steam OpenID → Supabase Auth bridge with origin-allowlisted redirects
+- JWT-validated edge functions with server-derived `steam_id` to prevent identity spoofing
+- Transparent scoring: every grade exposes its formula and the match-specific inputs
 
-### Technical Details
+**Footer:** Live → `d2stats-savcoe-dev.lovable.app`
 
-**File changed:** `src/components/dashboard/MatchHistory.tsx`
+## Visual Direction
+- **Palette:** Off-white background `#F7F5F2`, near-black text `#1A1A1A`, single muted accent `#3A5A78` (matte off-blue from the app's identity) for the headline rule, stat numbers, and link
+- **Type:** Georgia (serif) for headline + section labels in small caps; Helvetica for body and captions
+- **Rules:** Two thin horizontal hairlines (top/bottom thirds) for editorial pacing; small caps eyebrows for section labels
+- **Stat tiles:** 4 equal-width cells separated by hairlines (no boxes), big serif numbers + small caps captions
 
-- Add per-row state `showCalc: boolean` (track inside `expandedId` panel via a separate `calcOpenId` state, or local state per panel).
-- Extract a `CalculationBreakdown` subcomponent that takes the same `breakdown`, `formula`, `label`, `color`, `icon`, `note` props the tooltip uses, so the data source is shared with the tooltips (single source of truth).
-- Use `Calculator` icon from `lucide-react` for the toggle.
-- Apply Tailwind responsive classes (`px-4 sm:px-6`, `flex-col sm:flex-row`, `hidden sm:flex`, `min-w-0`, `truncate`, `shrink-0`) — no new dependencies.
-- Animation: `motion.div` with `initial={{ height: 0, opacity: 0 }}` → `animate={{ height: "auto", opacity: 1 }}`, 250ms easeOut, animating only height + opacity to keep 60fps.
+## QA
+After generating, render the PDF to JPEG with `pdftoppm` and visually inspect for:
+- Text overflow or clipped lines
+- Column alignment and even spacing
+- Margin consistency and accent-color contrast
 
-**Files NOT changed:** scoring engine, sync function, database schema, ScoreCard, PerformanceChart, TierBadge, tooltip primitive.
+Iterate until clean, then deliver via `<lov-artifact>`.
