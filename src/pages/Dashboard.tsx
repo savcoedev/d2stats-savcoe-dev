@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { format } from "date-fns";
 import { motion } from "framer-motion";
 import { Shield, Sword, Heart } from "lucide-react";
+import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import ProfileHeader from "@/components/dashboard/ProfileHeader";
@@ -81,6 +82,24 @@ const Dashboard = () => {
         body: { steam_id: profile.steam_id },
       });
       if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+
+      const newCount = data?.new_matches ?? 0;
+      const recomputed = data?.recomputed ?? 0;
+      const total = data?.total ?? newCount + recomputed;
+
+      if (newCount > 0) {
+        toast.success(`Synced ${newCount} new match${newCount === 1 ? "" : "es"}`, {
+          description: recomputed > 0 ? `Refreshed scores for ${recomputed} existing match${recomputed === 1 ? "" : "es"}.` : undefined,
+        });
+      } else if (recomputed > 0) {
+        toast.success("You're up to date", {
+          description: `Refreshed scores for ${recomputed} match${recomputed === 1 ? "" : "es"}.`,
+        });
+      } else {
+        toast.message("Nothing to sync", { description: "No matches found." });
+      }
+
       await fetchStats();
     } catch (e: any) {
       const msg = e?.message ?? "Sync failed";
@@ -89,6 +108,7 @@ const Dashboard = () => {
       } else {
         setSyncError(msg);
       }
+      toast.error("Sync failed", { description: msg });
     } finally {
       setSyncing(false);
     }
