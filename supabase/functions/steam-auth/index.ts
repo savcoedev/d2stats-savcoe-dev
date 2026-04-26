@@ -15,6 +15,7 @@ const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const DEFAULT_ALLOWED_ORIGINS = [
   "https://id-preview--068b2a40-587e-4e39-9099-94c97c507c25.lovable.app",
   "https://d2stats-savcoe-dev.lovable.app",
+  "https://d2.savcoe.dev",
   "http://localhost:5173",
   "http://localhost:8080",
 ];

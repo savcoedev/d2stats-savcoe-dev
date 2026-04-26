@@ -1,16 +1,25 @@
-## Update README
+## Problem
 
-Update `README.md` with the following changes:
+The Steam login URL `https://d2.savcoe.dev` returns "Invalid redirect_uri" because the custom domain isn't in the allowlist inside `supabase/functions/steam-auth/index.ts`. Only the Lovable preview/published domains and localhost are currently permitted.
 
-- **Live URL** — switch from `https://d2stats-savcoe-dev.lovable.app` to the custom domain `https://d2.savcoe.dev`.
-- **Features** — add two new bullets:
-  - **Publish verification** — manual "Verify deployment" admin action that fetches the live `index.html`, confirms the React root and bundled script tags are present, and emails the admin if anything is missing.
-  - **Transactional email** — branded notifications sent from `mail.d2.savcoe.dev`.
-- **Architecture diagram** — add a "Resend / Email" node alongside OpenDota and Steam to reflect the new outbound email path.
-- **Engineering Highlights** — add a bullet describing the publish-health check (HTML fetch, content assertions, email alerting via queued send).
-- **Project Structure** — under `supabase/functions/`, add:
-  - `verify-publish/` — fetches deployed HTML, validates required markers, logs result, queues alert on failure
-  - `process-email-queue/` — drains the outbound transactional email queue
-- Minor copy polish; keep tone and section order otherwise unchanged.
+## Fix
 
-No code or schema changes — documentation only. After the edit I'll commit it as part of the normal Lovable save flow.
+Add `https://d2.savcoe.dev` to the `DEFAULT_ALLOWED_ORIGINS` array in `supabase/functions/steam-auth/index.ts`, then redeploy the `steam-auth` edge function.
+
+### File change
+
+`supabase/functions/steam-auth/index.ts` — extend `DEFAULT_ALLOWED_ORIGINS`:
+
+```ts
+const DEFAULT_ALLOWED_ORIGINS = [
+  "https://id-preview--068b2a40-587e-4e39-9099-94c97c507c25.lovable.app",
+  "https://d2stats-savcoe-dev.lovable.app",
+  "https://d2.savcoe.dev",
+  "http://localhost:5173",
+  "http://localhost:8080",
+];
+```
+
+### Deploy
+
+Redeploy `steam-auth` so the new allowlist takes effect, then retry Sign in with Steam from `https://d2.savcoe.dev`.
