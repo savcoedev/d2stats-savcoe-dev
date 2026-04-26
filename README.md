@@ -2,7 +2,7 @@
 
 **Role-aware analytics for Dota 2 players.**
 
-🔗 Live: https://d2stats-savcoe-dev.lovable.app
+🔗 Live: https://d2.savcoe.dev
 
 ---
 
@@ -20,6 +20,8 @@ KDA flattens every player into the same yardstick — a support warding the map 
 - **3-way radar comparison** — overlay your metrics against two other players
 - **Friends leaderboard** — ranks registered users among your Steam friends
 - **Game-mode segregation** — Ranked, Normal, and Turbo handled separately (with Turbo scaling)
+- **Publish verification** — manual "Verify deployment" admin action fetches the live `index.html`, asserts the React root and bundled script tags are present, and emails the admin if anything is missing
+- **Transactional email** — branded notifications sent from `mail.d2.savcoe.dev`
 
 ## Tech Stack
 
@@ -40,10 +42,10 @@ KDA flattens every player into the same yardstick — a support warding the map 
         │  (Deno / Supabase)│
         └──┬────────┬───────┘
            │        │
-   ┌───────▼──┐  ┌──▼─────────┐  ┌──────────────┐
-   │ OpenDota │  │ Steam      │  │ Supabase DB  │
-   │   API    │  │ OpenID     │  │ (Postgres+RLS)│
-   └──────────┘  └────────────┘  └──────────────┘
+   ┌───────▼──┐  ┌──▼─────────┐  ┌──────────────┐  ┌──────────────┐
+   │ OpenDota │  │ Steam      │  │ Supabase DB  │  │ Resend /     │
+   │   API    │  │ OpenID     │  │ (Postgres+RLS)│  │ Email (SMTP) │
+   └──────────┘  └────────────┘  └──────────────┘  └──────────────┘
 ```
 
 ## Engineering Highlights
@@ -53,6 +55,7 @@ KDA flattens every player into the same yardstick — a support warding the map 
 - **Open-redirect protection** — `redirect_uri` is validated against an origin allowlist before being reflected back to the caller
 - **Transparent scoring** — every metric in the UI links back to its formula and per-match inputs; no black-box grades
 - **60 fps motion** — transform/opacity-only animations across the app, glassmorphism surfaces with matte off-white/off-blue palette
+- **Publish health check** — admin-triggered edge function fetches the deployed HTML, validates required markers (React root, hashed bundle tags), logs the result, and queues an email alert via the transactional email pipeline if the published page is broken
 
 ## Local Development
 
@@ -83,7 +86,9 @@ supabase/functions/
 ├─ sync-matches/           OpenDota match ingest (25-game window)
 ├─ sync-heroes/            Hero metadata sync
 ├─ compare-players/        3-way comparison aggregation
-└─ get-friends-leaderboard/ Steam friends ∩ registered users
+├─ get-friends-leaderboard/ Steam friends ∩ registered users
+├─ verify-publish/         Fetches deployed HTML, validates required markers, logs result, queues alert on failure
+└─ process-email-queue/    Drains the outbound transactional email queue
 ```
 
 ## License
