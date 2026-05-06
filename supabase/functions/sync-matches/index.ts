@@ -41,9 +41,15 @@ function computeScores(stats: any, gameMode: number, durationSec: number) {
   // Map Pressure (×100 for parity): P = (TD + LH*scalar) / T_minutes
   const mapPressure = (TD + (LH * modeScalar)) / durationMin;
 
-  // Survival: S = ((T_match - D*35) / T_match) * 100
-  const tMatch = Math.max(durationSec, 1);
-  const survivalConsistency = Math.max(0, ((tMatch - (D * 35)) / tMatch) * 100);
+  // Survival Consistency (Impact-dependent, penalised by death ratio)
+  // death_ratio = D / max(K + A, 1)
+  // base_survival = max(0, 100 - death_ratio * 40)
+  // impact_bonus = clamp(impactScore * 0.5, 0, 20)
+  // survival = clamp(base + bonus, 0, 100)
+  const deathRatio = D / Math.max(K + A, 1);
+  const baseSurvival = Math.max(0, 100 - deathRatio * 40);
+  const impactBonus = Math.min(Math.max(impactScore * 0.5, 0), 20);
+  const survivalConsistency = Math.min(baseSurvival + impactBonus, 100);
 
   return {
     combat_score: Math.round(impactScore * 100) / 100,
